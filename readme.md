@@ -43,7 +43,7 @@ pip install yotta
 
 **Which compiler** you need depends on whether you're building programs for your host system, or cross-compiling them to run on an embedded device:
 
- * To cross-compile, install [the **ARM none-EABI GCC**](https://launchpad.net/gcc-arm-embedded/+download).
+ * To cross-compile, install [the **arm-none-eabi-gcc**](https://launchpad.net/gcc-arm-embedded/+download).
  * To compile natively on OS X, [install **Xcode**](https://developer.apple.com/xcode/downloads/), including the command-line tools.
  * To compile natively on Linux, install **Clang** with your system's package manager.
 
