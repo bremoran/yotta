@@ -22,6 +22,9 @@ def addOptions(parser):
     parser.add_argument('--all', '-a', dest='show_all', default=False, action='store_true',
         help='Show all dependencies (including repeats, and test-only dependencies)'
     )
+    parser.add_argument('--dot', '-d', dest='dot', default=False, action='store_true',
+        help='Generate Graphviz DOT output'
+    )
 
 def execCommand(args, following_args):
     c = validate.currentDirectoryModule()
@@ -43,19 +46,35 @@ def execCommand(args, following_args):
         available_components = [(c.getName(), c)],
                         test = True
     )
-
+    if args.dot:
+        putln('digraph {')
     putln(
         ComponentDepsFormatter(
                            target = target,
              available_components = dependencies,
                             plain = args.plain,
-                         list_all = args.show_all
+                         list_all = args.show_all,
+                              dot = args.dot
         ).format(
             c, [c.getName()]
         )
     )
+    if args.dot:
+        putln('}')
 
 
+def df(dependencies):
+    r=''
+    for d in dependencies:
+        r += str(d) + ':' + str(dependencies[d])
+        r += '\n'
+    return r
+
+def dotFormater(dependencies):
+    r = 'digraph {\n'
+    r += df(dependencies)
+    r += '}'
+    return r
 
 def islast(generator):
     next_x = None
@@ -83,7 +102,7 @@ def relpathIfSubdir(path):
         return relpath
 
 class ComponentDepsFormatter(object):
-    def __init__(self, target=None, available_components=None, list_all=False, plain=False):
+    def __init__(self, target=None, available_components=None, list_all=False, plain=False, dot=False):
         # don't even try to do Unicode on windows. Even if we can encode it
         # correctly, the default terminal fonts don't support Unicode
         # characters :(
@@ -91,6 +110,7 @@ class ComponentDepsFormatter(object):
         self.use_colours = not plain
         self.target    = target
         self.list_all  = list_all
+        self.dot       = dot
         self.available = available_components
         if plain:
             self.L_Char = u' '
@@ -165,16 +185,21 @@ class ComponentDepsFormatter(object):
             return False
 
 
-        line = indent[:-2] + tee + component.getName() + u' ' + DIM + str(component.getVersion()) + RESET
+        if self.dot:
+            n = component.getName()
+            ni = n.replace('-','_')
+            line = '    {id}[label="{name} {version}"]'.format(id=ni, name=n, version=str(component.getVersion()))
+        else:
+            line = indent[:-2] + tee + component.getName() + u' ' + DIM + str(component.getVersion()) + RESET
 
-        if spec and not spec.match(component.getVersion()):
-            line += u' ' + RESET + BRIGHT + RED + str(spec) + RESET
-        if test_dep:
-            line += u' ' + DIM + u'(test dependency)' + RESET
-        if len(installed_at):
-            line += u' ' + DIM + installed_at + RESET
-        if component.installedLinked():
-            line += GREEN + BRIGHT + u' -> ' + RESET + GREEN + fsutils.realpath(component.path) + RESET
+            if spec and not spec.match(component.getVersion()):
+                line += u' ' + RESET + BRIGHT + RED + str(spec) + RESET
+            if test_dep:
+                line += u' ' + DIM + u'(test dependency)' + RESET
+            if len(installed_at):
+                line += u' ' + DIM + installed_at + RESET
+            if component.installedLinked():
+                line += GREEN + BRIGHT + u' -> ' + RESET + GREEN + fsutils.realpath(component.path) + RESET
 
         r += line + '\n'
 
@@ -182,7 +207,6 @@ class ComponentDepsFormatter(object):
         print_deps = [x for x in list(deps.items()) if shouldDisplay(x)]
 
         processed += [x[0] for x in print_deps]
-
 
         for (name, dep), last in islast(print_deps):
             if last:
@@ -198,7 +222,10 @@ class ComponentDepsFormatter(object):
                 test_dep_status = u' (test dependency)'
 
             if not dep:
-                r += indent + tee + name + u' ' + specs[name].version_req + test_dep_status + BRIGHT + RED + ' missing' + RESET + '\n'
+                if self.dot:
+                    r += '    {ID} -> {DEP} [label="{label}",color={colour}]\n'.format(ID=ni,DEP=name.replace('-','_'),label=str(spec)+' missing',colour='red')
+                else:
+                    r += indent + tee + name + u' ' + specs[name].version_req + test_dep_status + BRIGHT + RED + ' missing' + RESET + '\n'
             else:
                 spec = access.remoteComponentFor(name, specs[name].version_req, 'modules').versionSpec()
                 if not spec:
@@ -208,6 +235,22 @@ class ComponentDepsFormatter(object):
                 else:
                     spec_descr = u' ' + RESET + BRIGHT + RED + str(spec)
                 spec_descr += test_dep_status
+
+                if self.dot:
+                    n = component.getName()
+                    ni = n.replace('-','_')
+                    colour = 'black'
+                    fontColour = 'black'
+                    if isTestOnly(name):
+                        colour = 'blue'
+                    if not spec.match(dep.getVersion()):
+                        fontColour = 'red'
+                    r += '    {ID} -> {DEP} [label="{label}",color={colour},fontcolor={fontColour}]\n'.format(
+                                 ID = ni,
+                                DEP = name.replace('-','_'),
+                              label = str(spec),
+                             colour = colour,
+                         fontColour = fontColour)
 
                 if name in deps_here:
                     # dependencies that are first used here may actually be
@@ -233,6 +276,6 @@ class ComponentDepsFormatter(object):
                                       spec = spec
                         )
                 else:
-                    r += indent + tee + DIM + name + spec_descr + RESET + '\n'
+                    if not self.dot:
+                        r += indent + tee + DIM + name + spec_descr + RESET + '\n'
         return r
-
