@@ -188,7 +188,14 @@ class ComponentDepsFormatter(object):
         if self.dot:
             n = component.getName()
             ni = n.replace('-','_')
-            line = '    {id}[label="{name} {version}"]'.format(id=ni, name=n, version=str(component.getVersion()))
+            colour = 'black'
+            if component.installedLinked():
+                colour = 'forestgreen'
+            line = '    {id}[label="{name} {version}",color={colour},fontcolor={colour}]'.format(
+                            id = ni,
+                          name = n,
+                       version = str(component.getVersion()),
+                        colour = colour)
         else:
             line = indent[:-2] + tee + component.getName() + u' ' + DIM + str(component.getVersion()) + RESET
 
