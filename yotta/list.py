@@ -69,15 +69,18 @@ def formatJsonDeps(target, available_components, list_all):
         d[c]['name'] = co.getName()
         d[c]['version'] = str(co.getVersion())
         d[c]['dependencies'] = {}
+        if not co:
+            d[c]['missing'] = True
+        if co.installedLinked():
+            d[c]['link'] = fsutils.realpath(co.path)
+
         for dep in co.getDependencySpecs(target=target):
             depcomp = available_components[dep.name]
             spec = access.remoteComponentFor(dep.name, dep.version_req, 'modules').versionSpec()
             dd = {
                 'verspec':dep.version_req,
                    'test':dep.is_test_dependency,
-                'missing':not available_components[dep.name],
-               'mismatch':not spec.match(depcomp.getVersion()),
-                   'link':co.installedLinked()
+               'mismatch':not spec.match(depcomp.getVersion())
             }
             d[c]['dependencies'][dep.name]=dd
     return json.dumps(d)
