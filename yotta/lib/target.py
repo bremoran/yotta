@@ -371,7 +371,7 @@ class DerivedTarget(Target):
             (most-derived last).
         '''
         return reversed([
-            os.path.join(x.path, x.description['toolchain']) for x in self.hierarchy if 'toolchain' in x.description
+            os.path.join('${CMAKE_BINARY_DIR}','..','..',os.path.relpath(x.path), x.description['toolchain']) for x in self.hierarchy if 'toolchain' in x.description
         ])
 
     def getAdditionalIncludes(self):
@@ -380,7 +380,7 @@ class DerivedTarget(Target):
             be included (most-derived last).
         '''
         return reversed([
-            os.path.join(t.path, include_file)
+            os.path.join('${CMAKE_BINARY_DIR}','..','..',os.path.relpath(t.path), include_file)
                 for t in self.hierarchy
                 for include_file in t.description.get('cmakeIncludes', [])
         ])

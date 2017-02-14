@@ -173,7 +173,7 @@ class Pack(object):
 
         # resolve links at creation time, to minimise path lengths:
         self.unresolved_path = path
-        self.path = fsutils.realpath(path)
+        self.path = os.path.relpath(fsutils.realpath(path))
         self.installed_linked = installed_linked
         self.vcs = None
         self.error = None

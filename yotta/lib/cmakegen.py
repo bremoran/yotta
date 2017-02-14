@@ -32,6 +32,10 @@ def sanitizePreprocessorSymbol(sym):
 def sanitizeSymbol(sym):
     return re.sub('[^a-zA-Z0-9]', '_', str(sym))
 
+def abs2projrel(f):
+    f = str(f)
+    return os.path.join('${CMAKE_BINARY_DIR}', '..', '..', os.path.relpath(f))
+
 jinja_environment.filters['replaceBackslashes'] = replaceBackslashes
 jinja_environment.filters['sanitizePreprocessorSymbol'] = sanitizePreprocessorSymbol
 jinja_environment.globals['list'] = list
@@ -317,7 +321,7 @@ class CMakeGen(object):
 
         # make the path to the build-info header available both to CMake and
         # in the preprocessor:
-        full_build_info_header_path = replaceBackslashes(os.path.abspath(build_info_header_path))
+        full_build_info_header_path = replaceBackslashes(abs2projrel(os.path.abspath(build_info_header_path)))
         logger.debug('build info header include path: "%s"', full_build_info_header_path)
         definitions.append(('YOTTA_BUILD_INFO_HEADER', '"'+full_build_info_header_path+'"'))
 
@@ -352,7 +356,7 @@ class CMakeGen(object):
         # out for gcc-compatible compilers only:
         config_include_file = os.path.join(builddir, 'yotta_config.h')
         config_json_file    = os.path.join(builddir, 'yotta_config.json')
-        set_definitions += 'set(YOTTA_CONFIG_MERGED_JSON_FILE \"%s\")\n' % replaceBackslashes(os.path.abspath(config_json_file))
+        set_definitions += 'set(YOTTA_CONFIG_MERGED_JSON_FILE \"%s\")\n' % replaceBackslashes(abs2projrel(os.path.abspath(config_json_file)))
 
         self._writeFile(
             config_include_file,
@@ -439,24 +443,24 @@ class CMakeGen(object):
 
         include_root_dirs = ''
         if application is not None and component is not application:
-            include_root_dirs += 'include_directories("%s")\n' % replaceBackslashes(application.path)
+            include_root_dirs += 'include_directories("%s")\n' % replaceBackslashes(abs2projrel(application.path))
 
         include_sys_dirs = ''
         include_other_dirs = ''
         for name, c in itertools.chain(((component.getName(), component),), all_dependencies.items()):
             if c is not component and c.isTestDependency():
                 continue
-            include_root_dirs += 'include_directories("%s")\n' % replaceBackslashes(c.path)
+            include_root_dirs += 'include_directories("%s")\n' % replaceBackslashes(abs2projrel(c.path))
             dep_sys_include_dirs = c.getExtraSysIncludes()
             for d in dep_sys_include_dirs:
-                include_sys_dirs += 'include_directories(SYSTEM "%s")\n' % replaceBackslashes(os.path.join(c.path, d))
+                include_sys_dirs += 'include_directories(SYSTEM "%s")\n' % replaceBackslashes(os.path.join(abs2projrel(c.path), d))
             dep_extra_include_dirs = c.getExtraIncludes()
             for d in dep_extra_include_dirs:
-                include_other_dirs += 'include_directories("%s")\n' % replaceBackslashes(os.path.join(c.path, d))
+                include_other_dirs += 'include_directories("%s")\n' % replaceBackslashes(os.path.join(abs2projrel(c.path), d))
 
         add_depend_subdirs = ''
         for name, c in active_dependencies.items():
-            depend_subdir = replaceBackslashes(os.path.join(modbuilddir, name))
+            depend_subdir = replaceBackslashes(os.path.join(abs2projrel(modbuilddir), name))
             relpath = replaceBackslashes(os.path.relpath(depend_subdir, self.buildroot))
             add_depend_subdirs += \
                 'add_subdirectory(\n' \
@@ -499,7 +503,7 @@ class CMakeGen(object):
                     if f in test_subdirs and component.isTestDependency():
                         continue
                     add_own_subdirs.append(
-                        (os.path.join(component.path, f), f)
+                        (os.path.join(abs2projrel(component.path), f), f)
                     )
             # names of all directories at this level with stuff in: used to figure
             # out what to link automatically
@@ -548,7 +552,7 @@ class CMakeGen(object):
                                  is_executable = (f in binary_subdirs)
                     )
                 add_own_subdirs.append(
-                    (os.path.join(builddir, f), f)
+                    (os.path.join(abs2projrel(builddir), f), f)
                 )
 
             # from now on, completely forget that this component had any tests
@@ -588,7 +592,7 @@ class CMakeGen(object):
                             "toplevel": toplevel,
                          "target_name": self.target.getName(),
                      "set_definitions": self.set_toplevel_definitions,
-                      "toolchain_file": toolchain_file_path,
+                      "toolchain_file": os.path.basename(toolchain_file_path),
                            "component": component,
                              "relpath": relpath,
                    "include_root_dirs": include_root_dirs,
@@ -596,7 +600,7 @@ class CMakeGen(object):
                   "include_other_dirs": include_other_dirs,
                   "add_depend_subdirs": add_depend_subdirs,
                      "add_own_subdirs": add_own_subdirs,
-                 "config_include_file": self.config_include_file,
+                 "config_include_file": abs2projrel(self.config_include_file),
                          "delegate_to": delegate_to_existing,
                   "delegate_build_dir": delegate_build_dir,
                  "active_dependencies": active_dependencies,
@@ -618,7 +622,7 @@ class CMakeGen(object):
                 for f in files:
                     name, ext = os.path.splitext(f)
                     if ext.lower() == '.cmake' and not component.ignores(os.path.relpath(os.path.join(root, f), component.path)):
-                        cmake_files.append(os.path.join(root, f))
+                        cmake_files.append(os.path.join(abs2projrel(root), f))
 
         dummy_template = jinja_environment.get_template('dummy_CMakeLists.txt')
 
@@ -631,7 +635,7 @@ class CMakeGen(object):
         self._writeFile(os.path.join(builddir, dummy_dirname, "CMakeLists.txt"), dummy_cmakelists)
         dummy_cfile = "void __yotta_dummy_lib_symbol_%s(){}\n" % safe_name
         self._writeFile(os.path.join(builddir, dummy_dirname, dummy_cfile_name), dummy_cfile)
-        return (os.path.join(builddir, dummy_dirname), dummy_dirname)
+        return (os.path.join(abs2projrel(builddir), dummy_dirname), dummy_dirname)
 
     def writeIfDifferent(self, fname, contents):
         try:
@@ -669,12 +673,12 @@ class CMakeGen(object):
             object_name = '%s-test-%s' % (
                 component.getName(), os.path.basename(os.path.splitext(str(f))[0]).lower()
             )
-            tests.append([[str(f)], object_name, [f.lang]])
+            tests.append([[abs2projrel(f)], object_name, [f.lang]])
         for subdirname, sources in sorted(subdirs.items(), key=lambda x: x[0]):
             object_name = '%s-test-%s' % (
                 component.getName(), fsutils.fullySplitPath(subdirname)[0].lower()
             )
-            tests.append([[str(f) for f in sources], object_name, [f.lang for f in sources]])
+            tests.append([[abs2projrel(f) for f in sources], object_name, [f.lang for f in sources]])
 
         # link tests against the main executable
         if not module_is_empty:
@@ -686,12 +690,12 @@ class CMakeGen(object):
             for f in files:
                 name, ext = os.path.splitext(f)
                 if ext.lower() == '.cmake' and not component.ignores(os.path.relpath(os.path.join(root, f), component.path)):
-                    cmake_files.append(os.path.join(root, f))
+                    cmake_files.append(os.path.join(abs2projrel(root), f))
 
         test_template = jinja_environment.get_template('test_CMakeLists.txt')
 
         file_contents = test_template.render({ #pylint: disable=no-member
-             'source_directory':os.path.join(component.path, dirname),
+             'source_directory':os.path.join(abs2projrel(component.path), dirname),
                         'tests':tests,
             'link_dependencies':link_dependencies,
                   'cmake_files': cmake_files,
@@ -732,19 +736,19 @@ class CMakeGen(object):
             for f in files:
                 name, ext = os.path.splitext(f)
                 if ext.lower() == '.cmake' and not component.ignores(os.path.relpath(os.path.join(root, f), component.path)):
-                    cmake_files.append(os.path.join(root, f))
+                    cmake_files.append(os.path.join(abs2projrel(root), f))
 
         subdir_template = jinja_environment.get_template('subdir_CMakeLists.txt')
 
         file_contents = subdir_template.render({ #pylint: disable=no-member
-                'source_directory': os.path.join(component.path, dirname),
-             "config_include_file": self.config_include_file,
+                'source_directory': os.path.join(abs2projrel(component.path), dirname),
+             "config_include_file": abs2projrel(self.config_include_file),
                       'executable': is_executable,
-                      'file_names': [str(f) for f in source_files],
+                      'file_names': [os.path.join(abs2projrel(str(f))) for f in source_files],
                      'object_name': object_name,
                'link_dependencies': link_dependencies,
                        'languages': set(f.lang for f in source_files),
-                    'source_files': set((f.fullpath, f.lang) for f in source_files),
+                    'source_files': set((abs2projrel(f.fullpath), f.lang) for f in source_files),
                   'resource_files': resource_files,
                      'cmake_files': cmake_files
         })
